@@ -81,7 +81,6 @@ class Simulation(ABC):
     def display(self) -> None:
         self.world.display()
         glFinish()
-        self.swap_buffers()
     
     def update(self) -> bool:
         self.world.update()
