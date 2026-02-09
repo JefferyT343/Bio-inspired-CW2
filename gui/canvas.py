@@ -41,8 +41,9 @@ class Canvas(GLCanvas):
         self.SwapBuffers()
     
     def clean(self) -> None:
-        self.SetCurrent(self.context)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        return()
+#        self.SetCurrent(self.context)
+#        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     
     def on_paint(self, event):
         if not self.initialised:

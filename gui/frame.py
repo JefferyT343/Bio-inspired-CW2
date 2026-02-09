@@ -201,7 +201,6 @@ class Frame(wx.Frame):
         render_simulation: threading.Event,
         kill_thread: threading.Event
     ) -> None:
-        self.world_canvas.SetCurrent(self.world_canvas.context)
         time.sleep(0.2)
         if not self.current_simulation.loaded:
             self.current_simulation.begin_simulation()
@@ -219,11 +218,7 @@ class Frame(wx.Frame):
             complete = self.current_simulation.update()
             if render_simulation.is_set():
                 wx.CallAfter(self.world_canvas.display)
-                sleep_for = max(0, 1.0 / self.fps - (time.time() - start_time))
+                sleep_for = max(0.01, (1.0 / self.fps) - (time.time() - start_time))
                 time.sleep(sleep_for)
             if complete:
                 break
-            self.world_canvas.SetCurrent(self.world_canvas.context)
-        self.world_canvas.clean()
-    
-            

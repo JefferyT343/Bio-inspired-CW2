@@ -29,8 +29,9 @@ class Drawable(ABC):
         self.world = None
     
     def __del__(self):
-        if self._display_list != 0:
-            glDeleteLists(self._display_list, 1)
+        return
+#        if self._display_list != 0:
+#            glDeleteLists(self._display_list, 1)
     
     '''
     def _repr(self, **kwargs) -> str:
@@ -49,12 +50,12 @@ class Drawable(ABC):
     '''
     
     def initialise(self) -> None:
-        if self._display_list != 0:
-            glDeleteLists(self._display_list, 1)
-        self._display_list = glGenLists(1)
-        glNewList(self._display_list, GL_COMPILE)
-        self.draw()
-        glEndList()
+#        if self._display_list != 0:
+#            glDeleteLists(self._display_list, 1)
+#        self._display_list = glGenLists(1)
+#        glNewList(self._display_list, GL_COMPILE)
+#        self.draw()
+#       glEndList()
         
         if not self.circular:
             for e in self.edges:
@@ -72,8 +73,9 @@ class Drawable(ABC):
         glPopMatrix()
     
     def render(self) -> None:
-        if self._display_list:
-            glCallList(self._display_list)
+        self.draw()
+#        if self._display_list:
+#            glCallList(self._display_list)
     
     def draw(self) -> None:
         sides = 15 if self.circular else len(self.edges)

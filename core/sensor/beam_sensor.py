@@ -70,7 +70,8 @@ class BeamSensor(Sensor):
             scale = self.draw_scale - self.output()
         
         glScaled(scale, scale, 1.0)
-        glCallList(self._display_list)
+        self.draw()
+#        glCallList(self._display_list)
         glPopMatrix()
         
     def display(self) -> None:
@@ -138,4 +139,3 @@ class BeamSensor(Sensor):
             return start_angle <= angle_to_other <= end_angle
         else:
             return start_angle <= angle_to_other or angle_to_other <= end_angle
-    

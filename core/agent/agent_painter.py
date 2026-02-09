@@ -1,7 +1,4 @@
-from OpenGL.GL import *
-
 from core.agent.agent import Agent
-from core.utils import ColourPalette, ColourType as CT
 
 MONITOR_BAR_HEIGHT = 25
 
