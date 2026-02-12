@@ -3,6 +3,7 @@ import numpy as np
 from OpenGL.GL import *
 from core.sensor.base import Sensor, MatchFunction, EvaluateFunction, ScaleFunction
 from core.utils import Vec2, BeamSettings as BS, get_vector_angle
+from numpy import rad2deg
 
 class BeamSensor(Sensor):
     def __init__(
@@ -62,7 +63,7 @@ class BeamSensor(Sensor):
     def _display(self) -> None:
         glPushMatrix()
         glTranslated(self.location[0], self.location[1], 0)
-        glRotated(self.orientation, 0.0, 0.0, 1.0)
+        glRotated(rad2deg(self.orientation), 0.0, 0.0, 1.0)
         
         if self.draw_fixed:
             scale = self.draw_scale

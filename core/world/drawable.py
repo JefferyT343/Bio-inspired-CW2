@@ -68,7 +68,7 @@ class Drawable(ABC):
             return
         glPushMatrix()
         glTranslated(self.location[0], self.location[1], 0.0)
-        glRotated(np.degrees(self.orientation), 0.0, 0.0, 1.0)
+        glRotated(np.rad2deg(self.orientation), 0.0, 0.0, 1.0)
         self.render()
         glPopMatrix()
     
