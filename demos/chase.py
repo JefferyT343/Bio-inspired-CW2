@@ -100,3 +100,12 @@ class ChaseSimulation(Simulation):
         
         self.add("prey", Population(population_prey, Prey, ga_prey, team_size=10))
         self.add("predator", Population(population_pred, Predator, ga_pred, team_size=10))
+
+    def log_end_generation(self):
+        prey_averages = self.contents["prey"].average_member_fitness()
+        prey_average = sum(prey_averages) / len(prey_averages)
+        self.log.info(f"Average prey Fitness: {prey_average:.3f}")
+
+        predator_averages = self.contents["predator"].average_member_fitness()
+        predator_average = sum(predator_averages) / len(predator_averages)
+        self.log.info(f"Average predator Fitness: {predator_average:.3f}")
