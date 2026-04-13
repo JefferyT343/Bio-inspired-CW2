@@ -1,5 +1,5 @@
-from OpenGL.GL import *
-from OpenGL.GLU import *
+from core.opengl import *
+from core.opengl import *
 from core.world.drawable import Drawable
 from core.utils import Vec2, MAX_COLLISIONS
 

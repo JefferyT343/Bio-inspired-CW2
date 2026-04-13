@@ -143,8 +143,11 @@ class GeneticAlgorithm(ABC):
                 if evo._fitness is None:
                     evo._probability = 0.0
                 else:
-                    evo._probability = (evo._fixed_fitness / self.total_fixed_fitness) ** self._float_params.EXPONENT
-                    self.total_probability += evo._probability
+                    if not np.isfinite(self.total_fixed_fitness) or self.total_fixed_fitness <= 0:
+                        evo._probability = 0.0
+                    else:
+                        evo._probability = (evo._fixed_fitness / self.total_fixed_fitness) ** self._float_params.EXPONENT
+                        self.total_probability += evo._probability
         if self.selection == GA_SELECTION_TYPE.RANK:
             for rank, evo in enumerate(self.population.members):
                 if evo._fitness is None:
@@ -153,8 +156,19 @@ class GeneticAlgorithm(ABC):
                     evo._probability = (1.0 - rank / (self.input_population_size - 1)) ** self._float_params.EXPONENT
                     self.total_probability += evo._probability
         elif self.selection in [GA_SELECTION_TYPE.ROULETTE, GA_SELECTION_TYPE.RANK]:
-            for evo in self.population.members:
-                evo._probability /= self.total_probability
+            if not np.isfinite(self.total_probability) or self.total_probability <= 0:
+                valid = [evo for evo in self.population.members if evo._fitness is not None]
+                if not valid:
+                    p = 1.0 / self.input_population_size
+                    for evo in self.population.members:
+                        evo._probability = p
+                else:
+                    p = 1.0 / len(valid)
+                    for evo in self.population.members:
+                        evo._probability = p if evo._fitness is not None else 0.0
+            else:
+                for evo in self.population.members:
+                    evo._probability /= self.total_probability
         
     def clean(self) -> None:
         if self.owns_data:

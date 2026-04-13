@@ -1,7 +1,7 @@
 import numpy as np
 
-from OpenGL.GL import *
-from OpenGL.GLU import *
+from core.opengl import *
+from core.opengl import *
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 from core.world.drawable import Drawable

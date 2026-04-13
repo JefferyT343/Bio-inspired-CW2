@@ -1,6 +1,13 @@
 import numpy as np
 
-from typing import TypeAlias, Literal
+try:
+    from typing import TypeAlias, Literal
+except ImportError:  # Python < 3.10 fallback
+    from typing import Literal
+    try:
+        from typing_extensions import TypeAlias
+    except ImportError:
+        TypeAlias = object
 from types import SimpleNamespace
 
 # Vector Type Aliases

@@ -8,6 +8,7 @@ class TouchSensor(Sensor):
         super().initialise()
     
     def interact(self, other: WorldObject) -> None:
-        if self.match_function and self.owner and self.owner.is_touching(other):
-            self.evaluate_function(other, other.nearest_point(self))
+        if self.match_function and self.evaluate_function and self.owner and self.owner.is_touching(other):
+            point, _ = other.nearest_point(self.location)
+            self.evaluate_function(other, point)
     

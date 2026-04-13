@@ -3,7 +3,7 @@ import sys
 import time
 
 from abc import ABC
-from OpenGL.GL import glFinish
+from core.opengl import glFinish
 from core.world.world import World
 from core.evolve.base import SimulationObject
 
@@ -48,6 +48,9 @@ class Simulation(ABC):
             sys.exit(app.exec_())
         else:
             self.run_simulation_no_render(parallel)
+
+    def run_simulation_no_render(self, parallel = False) -> None:
+        self._run_simulation_no_render(parallel)
     
     def _run_simulation_no_render(self, parallel):
         self.initialise()

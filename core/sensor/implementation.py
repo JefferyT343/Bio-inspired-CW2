@@ -44,6 +44,20 @@ def nearest_angle_sensor(
         s.scale_function = ScaleLinear(-np.pi, np.pi, 1.0, -1.0)
     return s
 
+def nearest_distance_sensor(
+    typing: type[WorldObject],
+    sensor_range: float = 1000.0,
+    reverse = False
+) -> Sensor:
+    s = Sensor()
+    s.match_function = MatchKind(typing)
+    s.evaluate_function = EvaluateNearest(s, sensor_range)
+    if not reverse:
+        s.scale_function = ScaleLinear(0.0, sensor_range, 1.0, 0.0)
+    else:
+        s.scale_function = ScaleLinear(0.0, sensor_range, 0.0, 1.0)
+    return s
+
 def nearest_x_sensor(typing: type[WorldObject], sensor_range: float = 1000.0) -> Sensor:
     s = Sensor(np.array([0, 0], np.float32), 0.0)
     s.match_function = MatchKind(typing)

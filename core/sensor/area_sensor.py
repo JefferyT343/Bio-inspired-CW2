@@ -3,6 +3,8 @@ from core.world.world_object import WorldObject
 
 class AreaSensor(Sensor):
     def interact(self, other: WorldObject) -> None:
-        vector, _ = other.nearest_point(self)
-        if self.match_function and self.evaluate_function and self.is_inside(vector):
-            self.evaluate_function(other, vector)
+        if not self.match_function or not self.evaluate_function:
+            return
+        point, _ = other.nearest_point(self.location)
+        if self.is_inside(point):
+            self.evaluate_function(other, point)

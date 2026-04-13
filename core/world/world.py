@@ -1,11 +1,13 @@
 import numpy as np
+from typing import List, Type, Union
 
-from OpenGL.GL import *
-from OpenGL.GLU import *
+from core.opengl import *
 from core.world.collisions import Collisions, Collision
 from core.utils import Vec2, Vec3, WORLD_DISPLAY_PARAMETERS, WORLD_DISPLAY_TYPE, ColourPalette, BACKGROUND_COLOUR
 from core.agent.agent import Agent
 from core.world.world_object import WorldObject
+
+WorldItem = Union[WorldObject, Agent]
 
 class World:
     def __init__(self, simulation):
@@ -75,7 +77,7 @@ class World:
         glMatrixMode(GL_MODELVIEW)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE)
     
-    def add_object(self, obj: list[WorldObject | Agent] | WorldObject | Agent) -> None:
+    def add_object(self, obj: Union[List[WorldItem], WorldItem]) -> None:
         if isinstance(obj, list):
             for o in obj:
                 self.add_object(o)
@@ -95,24 +97,35 @@ class World:
         c = Collision(vector, bool(self._display_type.DISPLAY_COLLISIONS))
         self._collisions.append(c)
     
-    def remove_object(self, typing: type[WorldObject | Agent]) -> list[WorldObject | Agent]:
+    def remove_object(self, obj_or_type: Union[WorldItem, Type[WorldItem]]) -> List[WorldItem]:
         if self._update_in_progress:
-            return
-        
+            return []
+
         removed_objects = []
-        for obj in reversed(self._objects[:]):
-            if isinstance(obj, typing):
-                self._objects.remove(obj)
-                removed_objects.append(obj)
-        
-        removed_agents = []
-        for agt in reversed(self._agents[:]):
-            if isinstance(agt, typing):
-                self._agents.remove(agt)
-                self._agent_queue.append(agt)
-        
+        # Check if we're removing by instance or by type
+        if isinstance(obj_or_type, type):
+            # Remove by type
+            for obj in reversed(self._objects[:]):
+                if isinstance(obj, obj_or_type):
+                    self._objects.remove(obj)
+                    removed_objects.append(obj)
+
+            removed_agents = []
+            for agt in reversed(self._agents[:]):
+                if isinstance(agt, obj_or_type):
+                    self._agents.remove(agt)
+                    removed_agents.append(agt)
+        else:
+            # Remove by instance
+            if obj_or_type in self._objects:
+                self._objects.remove(obj_or_type)
+                removed_objects.append(obj_or_type)
+            elif obj_or_type in self._agents:
+                self._agents.remove(obj_or_type)
+                removed_objects.append(obj_or_type)
+
         # TODO: Monitor update?
-        return removed_objects + removed_agents
+        return removed_objects
     
     def display(self) -> None:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)

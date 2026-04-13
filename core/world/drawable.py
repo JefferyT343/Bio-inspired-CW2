@@ -1,7 +1,7 @@
 import numpy as np
 
 from abc import ABC
-from OpenGL.GL import *
+from core.opengl import *
 from core.utils import Vec2, DRAWABLE_RADIUS
 
 class Drawable(ABC):

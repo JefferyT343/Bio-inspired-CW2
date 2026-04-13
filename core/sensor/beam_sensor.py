@@ -1,6 +1,6 @@
 import numpy as np
 
-from OpenGL.GL import *
+from core.opengl import *
 from core.sensor.base import Sensor, MatchFunction, EvaluateFunction, ScaleFunction
 from core.utils import Vec2, BeamSettings as BS, get_vector_angle
 from numpy import rad2deg

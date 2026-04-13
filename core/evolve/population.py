@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Type, Union
 from core.evolve.base import Group
 from core.evolve.evolver import Evolver
 from core.evolve.genetic_algorithm import GeneticAlgorithm
@@ -8,7 +9,7 @@ class Population(Group):
     def __init__(
         self,
         population_size: int,
-        population_type: type[Agent] | type[Evolver],
+        population_type: Type[Union[Agent, Evolver]],
         genetic_algorithm: GeneticAlgorithm,
         team_size: int = -1,
         *args,
@@ -33,21 +34,26 @@ class Population(Group):
             self.world.add_object(m)
 
     
-    def clone(self, member: type[Agent] | type[Evolver]) -> type[Agent] | type[Evolver]:
+    def clone(self, member: Type[Union[Agent, Evolver]]) -> Type[Union[Agent, Evolver]]:
         return deepcopy(member)
     
     def merge(
         self,
-        one: type[Agent] | type[Evolver],
-        two: type[Agent] | type[Evolver]
-    ) -> type[Agent] | type[Evolver]:
+        one: Type[Union[Agent, Evolver]],
+        two: Type[Union[Agent, Evolver]]
+    ) -> Type[Union[Agent, Evolver]]:
         one._fitness_scores.append(two.get_fitness())
         del two
         return one
     
     def average_member_fitness(self) -> list[float]:
         return [ m.average_fitness for m in self.members ]
-    
+
+    def get_best_member(self) -> Type[Union[Agent, Evolver]]:
+        if not self.members:
+            return None
+        return max(self.members, key=lambda m: m.average_fitness)
+
     def begin_run(self) -> None:
         self.members.clear()
         self.members = [ self.typing(*self.args, **self.kwargs) for _ in range(self.n) ]

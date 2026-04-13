@@ -1,4 +1,4 @@
-from OpenGL.GL import *
+from core.opengl import *
 from core.utils import Vec2
 
 class Trail():
