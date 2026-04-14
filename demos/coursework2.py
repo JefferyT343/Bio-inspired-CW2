@@ -43,16 +43,16 @@ WORLD_H: float = WORLD_DISPLAY_PARAMETERS.height  # 600.0
 
 # ── Zone geometry ────────────────────────────────────────────────────────────
 """
-    place for creating zones, and defining their geometry (e.g. radius) and location (e.g. center coordinates).
-    The ResourceZone is a large green circle at the centre of the map, 
-    while the SafeZone is a blue circle in the bottom-left and top-right corners.
+    Diagonal Opposite Corners layout:
+    SafeZone at bottom-left corner (100, 100) and ResourceZone at top-right corner (700, 500).
+    This creates a strong safety versus reward trade-off, requiring prey agents
+    to travel diagonally across open space to obtain food while increasing exposure to predators.
 """
-RESOURCE_ZONE_CENTER = np.array([WORLD_W * 0.5, WORLD_H * 0.5], np.float32)
-RESOURCE_ZONE_RADIUS = 100.0
-
-SAFE_ZONE_CENTER  = np.array([80.0, 80.0], np.float32)            # bottom-left corner
-SAFE_ZONE_CENTER2 = np.array([WORLD_W - 80.0, WORLD_H - 80.0], np.float32)  # top-right corner
+SAFE_ZONE_CENTER  = np.array([100.0, 100.0], np.float32)
 SAFE_ZONE_RADIUS  = 60.0
+
+RESOURCE_ZONE_CENTER = np.array([700.0, 500.0], np.float32)
+RESOURCE_ZONE_RADIUS = 100.0
 
 # ── Sensor parameters ────────────────────────────────────────────────────────
 MAX_SENSOR_RANGE  = 300.0
@@ -362,9 +362,8 @@ class CoevSimulation(Simulation):
 
         # Persistent zone objects – re-injected into the world each assessment
         self._zones = [
-            ResourceZone(),
-            SafeZone(SAFE_ZONE_CENTER),   # bottom-left corner
-            SafeZone(SAFE_ZONE_CENTER2),  # top-right corner
+            SafeZone(SAFE_ZONE_CENTER),   # bottom-left corner (100, 100)
+            ResourceZone(),                # top-right corner (700, 500)
         ]
 
         # Fitness history for logging / CSV export
@@ -376,8 +375,8 @@ class CoevSimulation(Simulation):
         ga_prey = GeneticAlgorithm(0.25, 0.1, selection=GA_SELECTION_TYPE.ROULETTE)
         ga_pred = GeneticAlgorithm(0.25, 0.1, selection=GA_SELECTION_TYPE.ROULETTE)
 
-        self.add("prey",     Population(pop_size, Prey,     ga_prey, team_size=10))
-        self.add("predator", Population(pop_size, Predator, ga_pred, team_size=10))
+        self.add("prey",     Population(pop_size, Prey,     ga_prey, team_size=15))
+        self.add("predator", Population(pop_size, Predator, ga_pred, team_size=3))
 
     # ── Override begin_assessment to inject zones before world.initialise() ─
     def begin_assessment(self) -> None:
