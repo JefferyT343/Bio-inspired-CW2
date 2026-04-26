@@ -138,9 +138,9 @@ WORLD_DISPLAY_TYPE = SimpleNamespace(**{
 
 WORLD_DISPLAY_PARAMETERS = SimpleNamespace(**{
     "width": 800.0,
-    "height": 600.0,
+    "height": 800.0,
     "window_width": 800.0,
-    "window_height": 600.0,
+    "window_height": 800.0,
     "config": 65535,
     "colour": [1.0, 1.0, 1.0],
     "dimension": 0

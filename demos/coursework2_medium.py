@@ -39,20 +39,20 @@ CLASS_NAME = "CoevSimulationMedium"
 
 # ── World dimensions ─────────────────────────────────────────────────────────
 WORLD_W: float = WORLD_DISPLAY_PARAMETERS.width   # 800.0
-WORLD_H: float = WORLD_DISPLAY_PARAMETERS.height  # 600.0
+WORLD_H: float = WORLD_DISPLAY_PARAMETERS.height  # 800.0
 
 # ── Zone geometry ────────────────────────────────────────────────────────────
 """
     Medium Diagonal Distance layout:
-    SafeZone at (200, 200) and ResourceZone at (600, 400).
+    SafeZone at (200, 200) and ResourceZone at (600, 600).
     This creates a moderate safety versus reward trade-off with diagonal zones
-    at medium distance from each other.
+    at medium distance from each other in a square world.
 """
 SAFE_ZONE_CENTER  = np.array([200.0, 200.0], np.float32)
-SAFE_ZONE_RADIUS  = 60.0
+SAFE_ZONE_RADIUS  = 80.0
 
-RESOURCE_ZONE_CENTER = np.array([600.0, 400.0], np.float32)
-RESOURCE_ZONE_RADIUS = 100.0
+RESOURCE_ZONE_CENTER = np.array([600.0, 600.0], np.float32)
+RESOURCE_ZONE_RADIUS = 110.0
 
 # ── Sensor parameters ────────────────────────────────────────────────────────
 MAX_SENSOR_RANGE  = 300.0
@@ -201,15 +201,19 @@ class Prey(EvolvableFFNAgent, Evolver):
         resource_dist – normalised distance to ResourceZone centre
         safe_dist     – normalised distance to SafeZone centre
 
-    Fitness = food_collected – 10 × times_eaten  (clamped to ≥ 0)
+    Fitness = survival_time + food_collected×3 + resource_visits×20 + final_energy
     """
 
     def __init__(self):
         EvolvableFFNAgent.__init__(self)
         Evolver.__init__(self)
 
-        self.times_eaten:    int = 0
-        self.food_collected: int = 0
+        self.times_eaten:      int   = 0
+        self.food_collected:   int   = 0
+        self.energy:           float = 100.0
+        self.survival_time:    int   = 0
+        self.resource_visits:  int   = 0
+        self._was_in_resource: bool  = False
 
         # Predator-proximity sensors (threat detection)
         self.add_sensor(
@@ -242,11 +246,32 @@ class Prey(EvolvableFFNAgent, Evolver):
 
     def update(self):
         super().update()
-        # Reward foraging: +1 each timestep spent inside ResourceZone
+
+        # Passive energy drain
+        self.energy -= 0.06
+
+        # Check if inside resource zone
+        inside_resource = False
         for obj in self.world._objects:
             if isinstance(obj, ResourceZone) and obj.contains(self.location):
+                inside_resource = True
+                # Food reward: +1 per tick
                 self.food_collected += 1
+                # Energy gain: +0.35 per tick
+                self.energy += 0.35
                 break
+
+        # Track resource visits (edge detection: entering from outside)
+        if inside_resource and not self._was_in_resource:
+            self.resource_visits += 1
+        self._was_in_resource = inside_resource
+
+        # Track survival time (increments each tick while alive)
+        self.survival_time += 1
+
+        # Death if energy depleted
+        if self.energy <= 0.0:
+            self.dead = True
 
     def eaten(self):
         """Called by a Predator that successfully catches this prey."""
@@ -255,11 +280,20 @@ class Prey(EvolvableFFNAgent, Evolver):
         self.trail.clear()
 
     def get_fitness(self) -> float:
-        return max(0.0, float(self.food_collected) - 10.0 * self.times_eaten)
+        return float(
+            self.survival_time
+            + self.food_collected * 3
+            + self.resource_visits * 8
+            + self.energy
+        )
 
     def reset(self):
-        self.times_eaten    = 0
-        self.food_collected = 0
+        self.times_eaten      = 0
+        self.food_collected   = 0
+        self.energy           = 100.0
+        self.survival_time    = 0
+        self.resource_visits  = 0
+        self._was_in_resource = False
 
 
 class Predator(EvolvableFFNAgent, Evolver):
@@ -275,14 +309,15 @@ class Predator(EvolvableFFNAgent, Evolver):
     crossed into one.  Because predators cannot enter a SafeZone, prey inside
     are automatically protected – no extra check is needed in on_collision.
 
-    Fitness = number of prey successfully eaten.
+    Fitness = prey_captured×20 + final_energy
     """
 
     def __init__(self):
         EvolvableFFNAgent.__init__(self)
         Evolver.__init__(self)
 
-        self.prey_eaten: int = 0
+        self.prey_eaten: int   = 0
+        self.energy:     float = 100.0
 
         self.add_sensor(
             "prey_left",
@@ -308,6 +343,14 @@ class Predator(EvolvableFFNAgent, Evolver):
 
     def update(self):
         super().update()
+
+        # Passive energy drain
+        self.energy -= 0.06
+
+        # Death if energy depleted
+        if self.energy <= 0.0:
+            self.dead = True
+
         # Physical exclusion: push predator out of any SafeZone it has entered
         for obj in self.world._objects:
             if not isinstance(obj, SafeZone):
@@ -329,14 +372,17 @@ class Predator(EvolvableFFNAgent, Evolver):
         if isinstance(other, Prey):
             # Predator is already blocked from SafeZones, so any touching prey is fair game.
             self.prey_eaten += 1
+            # Energy gain from successful capture
+            self.energy += 18.0
             other.eaten()
         super().on_collision(other)
 
     def get_fitness(self) -> float:
-        return float(self.prey_eaten)
+        return float(self.prey_eaten * 20 + self.energy)
 
     def reset(self):
         self.prey_eaten = 0
+        self.energy     = 100.0
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -352,10 +398,11 @@ class CoevSimulationMedium(Simulation):
     def __init__(self):
         super().__init__("Coursework2_Medium")
 
+        self.display_on  = False  # Disable rendering for faster evolution
         self.runs        = 1
         self.generations = 50
         self.assessments = 2
-        self.timesteps   = 1000
+        self.timesteps   = 2000
 
         # Persistent zone objects – re-injected into the world each assessment
         self._zones = [
@@ -366,6 +413,18 @@ class CoevSimulationMedium(Simulation):
         # Fitness history for logging / CSV export
         self._prey_history:     list[float] = []
         self._predator_history: list[float] = []
+
+        # Per-generation metrics tracking
+        self._avg_prey_energy:     list[float] = []
+        self._prey_starved:        list[float] = []  # Prey that died from energy depletion
+        self._avg_food_collected:  list[float] = []
+        self._avg_times_eaten:     list[float] = []
+        self._avg_predator_energy: list[float] = []
+        self._pred_starved:        list[float] = []  # Predators that died from energy depletion
+
+        # Temporary storage for metrics (captured before reset, accumulated across assessments)
+        self._temp_metrics = {}
+        self._assessment_metrics = []  # Store metrics from each assessment
 
         # Co-evolving populations (30 individuals, 15 prey and 3 predators per assessment)
         pop_size = 30
@@ -395,8 +454,38 @@ class CoevSimulationMedium(Simulation):
         # Initialise all objects and agents that are now in the world
         self.world.initialise()
 
+    # ── Override end_assessment to capture metrics before reset ──────────────
+    def end_assessment(self) -> None:
+        # Capture metrics from active team BEFORE they are reset
+        prey_pop = self.contents["prey"]
+        all_prey = prey_pop.team if prey_pop.team_size != -1 else prey_pop.members
+        all_prey = [agent for agent in all_prey if isinstance(agent, Prey)]
+
+        pred_pop = self.contents["predator"]
+        all_pred = pred_pop.team if pred_pop.team_size != -1 else pred_pop.members
+        all_pred = [agent for agent in all_pred if isinstance(agent, Predator)]
+
+        # Store metrics from this assessment
+        # Count deaths: agents marked as dead (energy <= 0)
+        assessment_metrics = {
+            'prey_starved': sum(1 for prey in all_prey if prey.dead),
+            'avg_prey_energy': sum(prey.energy for prey in all_prey) / len(all_prey) if all_prey else 0.0,
+            'min_prey_energy': min((prey.energy for prey in all_prey), default=0.0),
+            'avg_food': sum(prey.food_collected for prey in all_prey) / len(all_prey) if all_prey else 0.0,
+            'avg_times_eaten': sum(prey.times_eaten for prey in all_prey) / len(all_prey) if all_prey else 0.0,
+            'avg_pred_energy': sum(pred.energy for pred in all_pred) / len(all_pred) if all_pred else 0.0,
+            'pred_starved': sum(1 for pred in all_pred if pred.dead),
+        }
+
+        # Accumulate metrics across assessments
+        self._assessment_metrics.append(assessment_metrics)
+
+        # Call parent's end_assessment (which will reset agents)
+        super().end_assessment()
+
     # ── Per-generation logging ───────────────────────────────────────────────
     def log_end_generation(self) -> None:
+        # Fitness tracking
         prey_avgs = self.contents["prey"].average_member_fitness()
         prey_avg  = sum(prey_avgs) / len(prey_avgs)
         self._prey_history.append(prey_avg)
@@ -405,10 +494,35 @@ class CoevSimulationMedium(Simulation):
         pred_avg  = sum(pred_avgs) / len(pred_avgs)
         self._predator_history.append(pred_avg)
 
+        # Average metrics across all assessments in this generation
+        num_assessments = len(self._assessment_metrics)
+        if num_assessments > 0:
+            prey_starved = sum(m['prey_starved'] for m in self._assessment_metrics) / num_assessments
+            avg_prey_energy = sum(m['avg_prey_energy'] for m in self._assessment_metrics) / num_assessments
+            min_prey_energy = min(m['min_prey_energy'] for m in self._assessment_metrics)
+            avg_food = sum(m['avg_food'] for m in self._assessment_metrics) / num_assessments
+            avg_times_eaten = sum(m['avg_times_eaten'] for m in self._assessment_metrics) / num_assessments
+            avg_pred_energy = sum(m['avg_pred_energy'] for m in self._assessment_metrics) / num_assessments
+            pred_starved = sum(m['pred_starved'] for m in self._assessment_metrics) / num_assessments
+        else:
+            prey_starved = avg_prey_energy = min_prey_energy = 0.0
+            avg_food = avg_times_eaten = avg_pred_energy = pred_starved = 0.0
+
+        # Clear assessment metrics for next generation
+        self._assessment_metrics.clear()
+
+        self._prey_starved.append(prey_starved)
+        self._avg_prey_energy.append(avg_prey_energy)
+        self._avg_food_collected.append(avg_food)
+        self._avg_times_eaten.append(avg_times_eaten)
+        self._avg_predator_energy.append(avg_pred_energy)
+        self._pred_starved.append(pred_starved)
+
         self.log.info(
             f"Gen {self._generation + 1:>3}/{self.generations} | "
-            f"Prey avg fitness: {prey_avg:8.3f} | "
-            f"Predator avg fitness: {pred_avg:8.3f}"
+            f"Prey fit: {prey_avg:7.2f} | Pred fit: {pred_avg:7.2f} | "
+            f"Prey E: {avg_prey_energy:5.1f} (starved:{prey_starved:.1f}, eaten:{avg_times_eaten:.1f}) | "
+            f"Pred E: {avg_pred_energy:5.1f} (starved:{pred_starved:.1f})"
         )
 
         # Save CSV on the final generation
@@ -416,15 +530,35 @@ class CoevSimulationMedium(Simulation):
             self._save_results()
 
     def _save_results(self) -> None:
-        desktop  = os.path.join(os.path.expanduser("~"), "Desktop")
+        # Save to results/ directory in project root
+        results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "results")
+        os.makedirs(results_dir, exist_ok=True)
         filename = os.path.join(
-            desktop, f"coursework2_medium_{self.generations}gens.csv"
+            results_dir, f"coursework2_medium_{self.generations}gens.csv"
         )
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["Generation", "Prey_Fitness", "Predator_Fitness"])
+            writer.writerow([
+                "Generation",
+                "Prey_Fitness",
+                "Predator_Fitness",
+                "Avg_Prey_Energy",
+                "Prey_Starved",
+                "Prey_Eaten",
+                "Avg_Food_Collected",
+                "Avg_Predator_Energy",
+                "Pred_Starved"
+            ])
             for i in range(self.generations):
-                writer.writerow([i + 1,
-                                 self._prey_history[i],
-                                 self._predator_history[i]])
+                writer.writerow([
+                    i + 1,
+                    self._prey_history[i],
+                    self._predator_history[i],
+                    self._avg_prey_energy[i],
+                    self._prey_starved[i],
+                    self._avg_times_eaten[i],
+                    self._avg_food_collected[i],
+                    self._avg_predator_energy[i],
+                    self._pred_starved[i]
+                ])
         self.log.info(f"Results saved → {filename}")
