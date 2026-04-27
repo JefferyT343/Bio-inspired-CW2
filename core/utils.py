@@ -145,6 +145,16 @@ WORLD_DISPLAY_PARAMETERS = SimpleNamespace(**{
     "colour": [1.0, 1.0, 1.0],
     "dimension": 0
 })
+#Second world display parameters for comparison.
+WORLD_DISPLAY_PARAMETERS2 = SimpleNamespace(**{
+    "width": 800.0,
+    "height": 600.0,
+    "window_width": 800.0,
+    "window_height": 600.0,
+    "config": 65535,
+    "colour": [1.0, 1.0, 1.0],
+    "dimension": 0
+})
 
 BACKGROUND_COLOUR = ColourType.DARK_PURPLE
 
