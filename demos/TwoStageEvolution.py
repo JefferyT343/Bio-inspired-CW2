@@ -432,7 +432,7 @@ class CoevSimulationTwoStage(Simulation):
 
         self.display_on  = False  # Disable rendering for faster evolution
         self.runs        = 1
-        self.generations = 100
+        self.generations = 200
         self.stage1_gens = STAGE1_GENS  # prey-only phase length
         self.assessments = 2
         self.timesteps   = 2000
@@ -634,7 +634,10 @@ class CoevSimulationTwoStage(Simulation):
         def smooth(data, window=5):
             if len(data) < window:
                 return list(data)
-            return np.convolve(data, np.ones(window) / window, mode="same").tolist()
+            smoothed = np.convolve(data, np.ones(window) / window, mode="same").tolist()
+            # Fix edge artifacts: use original values for last few points
+            smoothed[-3:] = data[-3:]
+            return smoothed
 
         prey_sm = smooth(self._prey_history)
         pred_sm = smooth(self._predator_history)
