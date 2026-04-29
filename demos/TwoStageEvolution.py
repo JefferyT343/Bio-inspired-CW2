@@ -432,7 +432,7 @@ class CoevSimulationTwoStage(Simulation):
 
         self.display_on  = False  # Disable rendering for faster evolution
         self.runs        = 1
-        self.generations = 50
+        self.generations = 100
         self.stage1_gens = STAGE1_GENS  # prey-only phase length
         self.assessments = 2
         self.timesteps   = 2000
