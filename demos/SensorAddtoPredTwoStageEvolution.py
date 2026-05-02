@@ -649,7 +649,7 @@ class CoevSimulationTwoStage(Simulation):
             2, 1, figsize=(12, 8), sharex=True,
             gridspec_kw={"hspace": 0.08}
         )
-        fig.suptitle("Prey vs Predator Fitness – Co-evolution Signal",
+        fig.suptitle("Prey vs Predator Fitness – Pred with Zone Sensors Added",
                      fontsize=13, fontweight="bold", y=0.98)
 
         # ── shared stage shading helper ──────────────────────────────────────
