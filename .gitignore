@@ -2,3 +2,5 @@ env/
 old/
 __pycache__/
 *.sif
+.DS_Store
+**/.DS_Store
