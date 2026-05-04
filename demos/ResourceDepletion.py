@@ -1,18 +1,28 @@
 """
-coursework2_medium.py – Co-evolutionary Predator–Prey Simulation with Zones (Medium Distance)
-Medium diagonal distance layout variant.
+ResourceDepletion.py – Co-evolutionary Predator–Prey Simulation with a
+**finite, regenerating ResourceZone** (medium diagonal layout).
 
 World layout (800 × 600):
     ResourceZone  – green circle at (600, 400)
-                    Prey gain +1 food reward every timestep they spend inside.
+                    Holds a shared food pool of `RESOURCE_CAPACITY` units.
+                    Each prey-tick inside removes 1 unit. When the pool hits
+                    zero the zone goes "depleted" (no further food / energy
+                    reward) and visually fades toward grey. After
+                    `RESOURCE_REGEN_COOLDOWN` ticks the pool refills to full.
     SafeZone      – red circle at (200, 200)
                     Predators are blocked from eating prey that are inside.
 
+Compared to the original constant-supply variant, this forces prey to
+periodically leave the zone (so the resource can recover) and creates
+intra-prey competition for the shared pool, producing richer co-evolutionary
+dynamics.
+
 Agents:
     Prey      – 4 sensors (2 predator-proximity + distance to each zone),
-                neural-network controlled, fitness = food_collected – 10×eaten.
+                neural-network controlled, fitness combines survival, food,
+                visits and energy (see Prey.get_fitness).
     Predator  – 2 prey-proximity sensors, neural-network controlled,
-                fitness = number of prey successfully eaten outside SafeZone.
+                fitness = prey_captured × 20 + final_energy.
 
 Both populations evolve independently via a Genetic Algorithm (roulette selection).
 """
@@ -34,7 +44,7 @@ from core.evolve.population import Population
 from core.world.world_object import WorldObject
 
 IS_DEMO  = True
-DEMO_NAME = "Coursework 2 - Sensor Added to Predator Two-Stage Evolution"
+DEMO_NAME = "Coursework 2 - Resource Depletion (Two-Stage)"
 CLASS_NAME = "CoevSimulationTwoStage"
 
 # ── World dimensions ─────────────────────────────────────────────────────────
@@ -62,6 +72,17 @@ PREY_INIT_ENERGY: float = 100.0
 PREY_MAX_ENERGY:  float = 150.0   # cap prevents unbounded accumulation in resource zone
 PRED_INIT_ENERGY: float = 100.0   # keep at 100: drain=0.06×2000=120 > 100, so must hunt
 PRED_MAX_ENERGY:  float = 250.0   # larger body (r=15 vs 10) stores more energy per capture
+
+# ── Resource depletion parameters ────────────────────────────────────────────
+# RESOURCE_CAPACITY: total food units in the shared pool when fully stocked.
+#   At 1 unit per prey-tick, a single prey can sit in the zone for at most
+#   RESOURCE_CAPACITY ticks before exhausting it. With ~5 prey simultaneously
+#   foraging this drains in ~RESOURCE_CAPACITY/5 ticks.
+# RESOURCE_REGEN_COOLDOWN: ticks the zone stays empty before fully refilling.
+#   Tuned so that across a 2000-tick assessment the zone goes through roughly
+#   2-3 deplete/refill cycles, forcing prey to leave and return.
+RESOURCE_CAPACITY:        float = 700.0
+RESOURCE_REGEN_COOLDOWN:  int   = 300
 
 # ── Sensor parameters ─────────────────────────────────────────────────────────
 MAX_SENSOR_RANGE  = 300.0
@@ -125,13 +146,90 @@ class Zone(WorldObject):
 
 
 class ResourceZone(Zone):
-    """Central green foraging area – prey gain +1 food per timestep inside."""
+    """
+    Foraging area with a finite shared food pool and timed regeneration.
+
+    Behaviour:
+      * Holds a pool of `max_capacity` food units (default RESOURCE_CAPACITY).
+      * `consume(amount)` removes `amount` units; returns True iff food was
+        actually delivered (i.e. the pool was non-empty before the call).
+      * When the pool hits zero the zone is "depleted": further consume()
+        calls return False and a refill cooldown of `regen_cooldown` ticks
+        starts.
+      * `update()` (driven by world.update() each tick) decrements the
+        cooldown; once it expires the pool refills to `max_capacity`.
+      * `initialise()` resets pool/cooldown so each assessment starts fresh.
+
+    Visual: the disk fades from green → grey as the pool drains, and is
+    fully grey while depleted.
+    """
+
+    BASE_COLOUR     = np.array([0.20, 0.85, 0.20], dtype=np.float32)   # full
+    DEPLETED_COLOUR = np.array([0.45, 0.45, 0.45], dtype=np.float32)   # empty
+
     def __init__(self):
         super().__init__(
             RESOURCE_ZONE_CENTER,
             RESOURCE_ZONE_RADIUS,
-            [0.2, 0.85, 0.2, 1.0]   # green
+            [0.2, 0.85, 0.2, 1.0]   # green; updated dynamically in draw()
         )
+        self.max_capacity:  float = RESOURCE_CAPACITY
+        self.regen_cooldown: int  = RESOURCE_REGEN_COOLDOWN
+        self._capacity:           float = self.max_capacity
+        self._cooldown_remaining: int   = 0
+        # Per-assessment counters (reset in initialise())
+        self.depletion_events: int = 0   # times the pool was emptied
+        self.depleted_ticks:   int = 0   # total ticks spent depleted
+
+    # Reset pool/cooldown each time the assessment world is initialised
+    def initialise(self) -> None:
+        super().initialise()
+        self._capacity            = self.max_capacity
+        self._cooldown_remaining  = 0
+        self.depletion_events     = 0
+        self.depleted_ticks       = 0
+
+    @property
+    def is_depleted(self) -> bool:
+        return self._capacity <= 0.0
+
+    def fill_ratio(self) -> float:
+        """Current fill level in [0, 1]."""
+        if self.max_capacity <= 0:
+            return 0.0
+        return max(0.0, min(1.0, self._capacity / self.max_capacity))
+
+    def consume(self, amount: float = 1.0) -> bool:
+        """
+        Try to remove *amount* units from the pool.
+        Returns True iff food was actually delivered.
+        """
+        if self.is_depleted:
+            return False
+        self._capacity -= amount
+        if self._capacity <= 0.0:
+            # Just emptied – clamp and start cooldown
+            self._capacity = 0.0
+            self.depletion_events    += 1
+            self._cooldown_remaining = self.regen_cooldown
+        return True
+
+    def update(self) -> None:
+        """Drive regen timer; called once per world tick."""
+        super().update()
+        if self.is_depleted:
+            self.depleted_ticks += 1
+            self._cooldown_remaining -= 1
+            if self._cooldown_remaining <= 0:
+                self._capacity           = self.max_capacity
+                self._cooldown_remaining = 0
+
+    def draw(self) -> None:
+        # Blend colour from BASE → DEPLETED based on remaining capacity
+        ratio   = self.fill_ratio()
+        blended = ratio * self.BASE_COLOUR + (1.0 - ratio) * self.DEPLETED_COLOUR
+        self.colour = [float(blended[0]), float(blended[1]), float(blended[2]), 1.0]
+        super().draw()
 
 
 class SafeZone(Zone):
@@ -261,15 +359,17 @@ class Prey(EvolvableFFNAgent, Evolver):
         # Passive energy drain
         self.energy -= 0.06
 
-        # Check if inside resource zone
+        # Check if inside resource zone. With depletion enabled, food/energy
+        # are only awarded if the zone's shared pool still has capacity.
+        # Entering a *depleted* zone still counts as being "inside" (so the
+        # visit edge-detection works) but yields no reward.
         inside_resource = False
         for obj in self.world._objects:
             if isinstance(obj, ResourceZone) and obj.contains(self.location):
                 inside_resource = True
-                # Food reward: +1 per tick
-                self.food_collected += 1
-                # Energy gain: +0.35 per tick (capped at PREY_MAX_ENERGY)
-                self.energy = min(self.energy + 0.35, PREY_MAX_ENERGY)
+                if obj.consume(1.0):
+                    self.food_collected += 1
+                    self.energy = min(self.energy + 0.35, PREY_MAX_ENERGY)
                 break
 
         # Track resource visits (edge detection: entering from outside)
@@ -346,9 +446,6 @@ class Predator(EvolvableFFNAgent, Evolver):
             "prey_right",
             proximity_sensor(Prey, np.pi / 4, MAX_SENSOR_RANGE, -np.pi / 8, True)
         )
-        # Zone-distance sensors (navigation cues)
-        self.add_sensor("resource_dist", ZoneDistanceSensor(RESOURCE_ZONE_CENTER, ZONE_SENSOR_RANGE))
-        self.add_sensor("safe_dist",     ZoneDistanceSensor(SAFE_ZONE_CENTER,     ZONE_SENSOR_RANGE))
 
         self._interaction_range = MAX_SENSOR_RANGE
         self.add_brain(4)
@@ -425,8 +522,10 @@ class Predator(EvolvableFFNAgent, Evolver):
 
 class CoevSimulationTwoStage(Simulation):
     """
-    Co-evolutionary predator–prey simulation with resource and safe zones.
-    Medium distance diagonal layout variant.
+    Co-evolutionary predator–prey simulation with a *depleting* resource zone
+    (medium-distance diagonal layout). The shared food pool drains as prey
+    forage, regenerates after a fixed cooldown, and forces prey to leave-and-
+    return rather than camping in the zone forever.
     """
 
     def __init__(self):
@@ -457,6 +556,9 @@ class CoevSimulationTwoStage(Simulation):
         self._avg_times_eaten:     list[float] = []
         self._avg_predator_energy: list[float] = []
         self._pred_starved:        list[float] = []  # Predators that died from energy depletion
+        # Resource-depletion diagnostics (averaged across assessments)
+        self._avg_depletion_events: list[float] = []  # # times pool emptied / assessment
+        self._avg_depleted_ticks:   list[float] = []  # # ticks zone was empty / assessment
 
         # Temporary storage for metrics (captured before reset, accumulated across assessments)
         self._temp_metrics = {}
@@ -518,6 +620,11 @@ class CoevSimulationTwoStage(Simulation):
         all_pred = pred_pop.team if pred_pop.team_size != -1 else pred_pop.members
         all_pred = [agent for agent in all_pred if isinstance(agent, Predator)]
 
+        # Capture resource-zone depletion stats BEFORE world.clean() removes them
+        resource_zones = [z for z in self._zones if isinstance(z, ResourceZone)]
+        depletion_events = sum(z.depletion_events for z in resource_zones)
+        depleted_ticks   = sum(z.depleted_ticks   for z in resource_zones)
+
         # Store metrics from this assessment
         # Count deaths: agents marked as dead (energy <= 0)
         assessment_metrics = {
@@ -528,6 +635,8 @@ class CoevSimulationTwoStage(Simulation):
             'avg_times_eaten': sum(prey.times_eaten for prey in all_prey) / len(all_prey) if all_prey else 0.0,
             'avg_pred_energy': sum(pred.energy for pred in all_pred) / len(all_pred) if all_pred else 0.0,
             'pred_starved': sum(1 for pred in all_pred if pred.dead),
+            'depletion_events': depletion_events,
+            'depleted_ticks':   depleted_ticks,
         }
 
         # Accumulate metrics across assessments
@@ -550,16 +659,19 @@ class CoevSimulationTwoStage(Simulation):
         # Average metrics across all assessments in this generation
         num_assessments = len(self._assessment_metrics)
         if num_assessments > 0:
-            prey_starved = sum(m['prey_starved'] for m in self._assessment_metrics) / num_assessments
-            avg_prey_energy = sum(m['avg_prey_energy'] for m in self._assessment_metrics) / num_assessments
-            min_prey_energy = min(m['min_prey_energy'] for m in self._assessment_metrics)
-            avg_food = sum(m['avg_food'] for m in self._assessment_metrics) / num_assessments
-            avg_times_eaten = sum(m['avg_times_eaten'] for m in self._assessment_metrics) / num_assessments
-            avg_pred_energy = sum(m['avg_pred_energy'] for m in self._assessment_metrics) / num_assessments
-            pred_starved = sum(m['pred_starved'] for m in self._assessment_metrics) / num_assessments
+            prey_starved      = sum(m['prey_starved']      for m in self._assessment_metrics) / num_assessments
+            avg_prey_energy   = sum(m['avg_prey_energy']   for m in self._assessment_metrics) / num_assessments
+            min_prey_energy   = min(m['min_prey_energy']   for m in self._assessment_metrics)
+            avg_food          = sum(m['avg_food']          for m in self._assessment_metrics) / num_assessments
+            avg_times_eaten   = sum(m['avg_times_eaten']   for m in self._assessment_metrics) / num_assessments
+            avg_pred_energy   = sum(m['avg_pred_energy']   for m in self._assessment_metrics) / num_assessments
+            pred_starved      = sum(m['pred_starved']      for m in self._assessment_metrics) / num_assessments
+            depletion_events  = sum(m['depletion_events']  for m in self._assessment_metrics) / num_assessments
+            depleted_ticks    = sum(m['depleted_ticks']    for m in self._assessment_metrics) / num_assessments
         else:
             prey_starved = avg_prey_energy = min_prey_energy = 0.0
             avg_food = avg_times_eaten = avg_pred_energy = pred_starved = 0.0
+            depletion_events = depleted_ticks = 0.0
 
         # Clear assessment metrics for next generation
         self._assessment_metrics.clear()
@@ -570,13 +682,16 @@ class CoevSimulationTwoStage(Simulation):
         self._avg_times_eaten.append(avg_times_eaten)
         self._avg_predator_energy.append(avg_pred_energy)
         self._pred_starved.append(pred_starved)
+        self._avg_depletion_events.append(depletion_events)
+        self._avg_depleted_ticks.append(depleted_ticks)
 
         stage_tag = "S1" if self._in_stage1() else "S2"
         self.log.info(
             f"[{stage_tag}] Gen {self._generation + 1:>3}/{self.generations} | "
             f"Prey fit: {prey_avg:7.2f} | Pred fit: {pred_avg:7.2f} | "
             f"Prey E: {avg_prey_energy:5.1f} (starved:{prey_starved:.1f}, eaten:{avg_times_eaten:.1f}) | "
-            f"Pred E: {avg_pred_energy:5.1f} (starved:{pred_starved:.1f})"
+            f"Pred E: {avg_pred_energy:5.1f} (starved:{pred_starved:.1f}) | "
+            f"ResDepl: {depletion_events:.1f}× ({depleted_ticks:.0f}t)"
         )
 
         # Save CSV on the final generation
@@ -588,7 +703,7 @@ class CoevSimulationTwoStage(Simulation):
         results_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "results")
         os.makedirs(results_dir, exist_ok=True)
         filename = os.path.join(
-            results_dir, f"SensorAddtoPredTwoStageEvolution_{self.generations}gens.csv"
+            results_dir, f"ResourceDepletion_{self.generations}gens.csv"
         )
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
@@ -602,7 +717,9 @@ class CoevSimulationTwoStage(Simulation):
                 "Prey_Eaten",
                 "Avg_Food_Collected",
                 "Avg_Predator_Energy",
-                "Pred_Starved"
+                "Pred_Starved",
+                "Resource_Depletion_Events",   # # times pool emptied / assessment
+                "Resource_Depleted_Ticks"      # # ticks zone was empty / assessment
             ])
             for i in range(self.generations):
                 writer.writerow([
@@ -615,7 +732,9 @@ class CoevSimulationTwoStage(Simulation):
                     self._avg_times_eaten[i],
                     self._avg_food_collected[i],
                     self._avg_predator_energy[i],
-                    self._pred_starved[i]
+                    self._pred_starved[i],
+                    self._avg_depletion_events[i],
+                    self._avg_depleted_ticks[i]
                 ])
         self.log.info(f"Results saved → {filename}")
         self._plot_results(results_dir)
@@ -634,21 +753,13 @@ class CoevSimulationTwoStage(Simulation):
         gens_s2 = gens[s1:]
         BOUNDARY_X = s1 + 0.5
 
-        # def smooth(data, window=5):
-        #     if len(data) < window:
-        #         return list(data)
-        #     smoothed = np.convolve(data, np.ones(window) / window, mode="same").tolist()
-        #     # Fix edge artifacts: use original values for last few points
-        #     smoothed[-3:] = data[-3:]
-        #     return smoothed
         def smooth(data, window=5):
-            data = np.asarray(data, dtype=float)
-            if len(data) == 0:
-                return []
-            kernel  = np.ones(window)
-            sums    = np.convolve(data,                kernel, mode="same")
-            counts  = np.convolve(np.ones_like(data),  kernel, mode="same")
-            return (sums / counts).tolist()
+            if len(data) < window:
+                return list(data)
+            smoothed = np.convolve(data, np.ones(window) / window, mode="same").tolist()
+            # Fix edge artifacts: use original values for last few points
+            smoothed[-3:] = data[-3:]
+            return smoothed
 
         prey_sm = smooth(self._prey_history)
         pred_sm = smooth(self._predator_history)
@@ -657,7 +768,7 @@ class CoevSimulationTwoStage(Simulation):
             2, 1, figsize=(12, 8), sharex=True,
             gridspec_kw={"hspace": 0.08}
         )
-        fig.suptitle("Prey vs Predator Fitness – Pred with Zone Sensors Added",
+        fig.suptitle("Prey vs Predator Fitness – Resource Depletion Co-evolution",
                      fontsize=13, fontweight="bold", y=0.98)
 
         # ── shared stage shading helper ──────────────────────────────────────
@@ -700,7 +811,7 @@ class CoevSimulationTwoStage(Simulation):
         ax_pred.legend(fontsize=10, loc="upper left")
 
         plot_path = os.path.join(
-            results_dir, f"SensorAddtoPredTwoStageEvolution_{self.generations}gens.png"
+            results_dir, f"ResourceDepletion_{self.generations}gens.png"
         )
         fig.savefig(plot_path, dpi=150, bbox_inches="tight")
         plt.close(fig)
