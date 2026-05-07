@@ -6,6 +6,8 @@ vectors, higher framerate, simpler setup, and a Qt GUI replacing WxWidgets.
 
 This repository contains our group's Coursework 2 solution: a co-evolutionary predator–prey simulation with safe / resource zones, plus several experiment variants (zone distance, predator sensors, resource depletion).
 
+The project can be found on GitHub with the link:
+https://github.com/JefferyT343/Bio-inspired-CW2.git
 ---
 
 ## 1. Project layout
