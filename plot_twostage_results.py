@@ -1,5 +1,7 @@
 """
 Plot results from TwoStageEvolution simulation.
+Can change the CSV file path to plot results from different runs, 
+also need change the plot title and saved filename accordingly.
 """
 import os
 import pandas as pd
